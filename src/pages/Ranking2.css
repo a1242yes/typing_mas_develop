@@ -1,0 +1,101 @@
+body {
+    background-color: #9EDF9C;
+    margin: 0px;
+}
+
+.fullScreen {
+    height: 95vh;
+}
+
+.top-panel {
+    background-color: white;
+    height: 150px;
+    display: flex;
+    align-items: center;
+}
+
+.top-panel > .mirim-png {
+    margin-left: 80px;
+    width: 130px;
+    height: 130px;
+}
+
+.top-panel p {
+    margin-left: 60px;
+    color: #000;
+    font-size: 28px;
+    font-weight: 700;
+}
+
+.top-panel > .human-png {
+    margin-left: 1390px;
+    width: 40px;
+    height: 48px;
+    margin-right: 80px;
+}
+
+.bottom {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-top: 178px;
+    margin-left: 410px;
+    margin-right: 434PX;
+}
+
+.change {
+    font-size: 1.5rem;
+    font-weight: bold;
+}
+
+.ranking-container {
+    display: grid;
+    grid-template-columns: repeat(2, 427px); 
+    align-items: center;
+    margin-top: 30px;
+    justify-items: center;
+    gap: 30px;
+    justify-content: center;
+}
+
+
+.ranking-row {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    width: auto;
+    margin-bottom: 20px;
+}
+
+
+.ranking-item {
+    border-radius: 15px;
+    background: #FFF;
+    display: flex;
+    width: 427px;
+    height: 100px;
+    flex-shrink: 0;
+}
+
+.ranking {
+    font-size: 1.2rem;
+    font-weight: bold;
+}
+
+.profile-pic {
+    width: 56px;
+    height: 56px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    margin: 10px 0;
+}
+
+.name {
+    font-size: 1rem;
+    font-weight: 500;
+}
+
+.tasu {
+    font-size: 1rem;
+    font-weight: normal;
+}
