@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import TypingBox from "../components/TypingBox";
 export default function StatsBox() {
   document.body.style.margin = "0px";
 
