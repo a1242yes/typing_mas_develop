@@ -6,6 +6,13 @@ interface TypingText {
   content: string;
 }
 
+interface Stats {
+  wpm: number;
+  accuracy: number;
+  timeElapsed: number;
+  errors: number;
+}
+
 export default function TypingBox() {
   // 상태 관리
   const [currentText, setCurrentText] = useState<TypingText | null>(null);
@@ -13,94 +20,36 @@ export default function TypingBox() {
   const [currentLineIndex, setCurrentLineIndex] = useState(0);
   const [isStarted, setIsStarted] = useState(false);
   const [startTime, setStartTime] = useState<Date | null>(null);
-  const [totalErrors, setTotalErrors] = useState(0); // 누적 오타 수
-  const [totalCorrectChars, setTotalCorrectChars] = useState(0); // 누적 정확한 글자 수
-  const [stats, setStats] = useState({
+  const [totalErrors, setTotalErrors] = useState(0); // 오타 수정: setTotnpalErrors -> setTotalErrors
+  const [totalCorrectChars, setTotalCorrectChars] = useState(0);
+  const [stats, setStats] = useState<Stats>({
     wpm: 0,
     accuracy: 100,
     timeElapsed: 0,
     errors: 0,
   });
-  const [connectionStatus, setConnectionStatus] = useState<
-    "connected" | "disconnected" | "checking"
-  >("checking");
+  const [isConnected, setIsConnected] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // 백엔드 연결 확인
-  const checkBackendConnection = async () => {
-    try {
-      setConnectionStatus("checking");
-      const response = await fetch("http://localhost:3000/health", {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (response.ok) {
-        setConnectionStatus("connected");
-        return true;
-      } else {
-        setConnectionStatus("disconnected");
-        return false;
-      }
-    } catch (error) {
-      console.error("백엔드 연결 실패:", error);
-      setConnectionStatus("disconnected");
-      return false;
-    }
-  };
-
-  // API에서 랜덤 텍스트 가져오기
-  const fetchRandomText = async () => {
-    const isConnected = await checkBackendConnection();
-
-    if (isConnected) {
-      try {
-        const response = await fetch(
-          "http://localhost:3000/typing/texts/random",
-          {
-            method: "GET",
-            headers: {
-              "Content-Type": "application/json",
-            },
-          }
-        );
-
-        if (response.ok) {
-          const data = await response.json();
-          setCurrentText(data);
-          setCurrentLineIndex(0);
-          setUserInput("");
-          console.log("텍스트 가져오기 성공:", data);
-          return;
-        } else {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-      } catch (error) {
-        console.error("텍스트 가져오기 실패:", error);
-      }
-    }
-
-    // API 실패 시 샘플 데이터 사용
-    const sampleTexts = [
-      {
-        id: "sample-1",
-        title: "Java Basic",
-        content: `public class Hello {
+  // 샘플 텍스트 (주석 해제 및 정리)
+  const sampleTexts = [
+    {
+      id: "sample-1",
+      title: "Java Basic",
+      content: `public class Hello {
     public static void main(String[] args) {
         System.out.println("Hello World!");
         int number = 42;
         String text = "Java Programming";
     }
 }`,
-      },
-      {
-        id: "sample-2",
-        title: "JavaScript Function",
-        content: `function calculateSum(a, b) {
+    },
+    {
+      id: "sample-2",
+      title: "JavaScript Function",
+      content: `function calculateSum(a, b) {
     const result = a + b;
     console.log('Sum:', result);
     return result;
@@ -108,30 +57,39 @@ export default function TypingBox() {
 
 const numbers = [1, 2, 3, 4, 5];
 const total = numbers.reduce((sum, num) => sum + num, 0);`,
-      },
-      {
-        id: "sample-3",
-        title: "Python Class",
-        content: `class Calculator:
+    },
+    {
+      id: "sample-3",
+      title: "Python Class",
+      content: `class Calculator:
     def __init__(self):
         self.result = 0
-    
+
     def add(self, value):
         self.result += value
-        return self.result
-    
-    def multiply(self, value):
-        self.result *= value
         return self.result`,
-      },
-    ];
+    },
+  ];
 
+  // 백엔드 연결 확인 및 텍스트 가져오기
+  const fetchRandomText = async () => {
+    try {
+      const response = await fetch("http://localhost:3000/typing/texts/random");
+      if (response.ok) {
+        const data = await response.json();
+        setCurrentText(data);
+        setIsConnected(true);
+        return;
+      }
+    } catch (error) {
+      console.log("백엔드 연결 실패, 샘플 데이터 사용");
+    }
+
+    // API 실패 시 샘플 데이터 사용
+    setIsConnected(false);
     const randomText =
       sampleTexts[Math.floor(Math.random() * sampleTexts.length)];
     setCurrentText(randomText);
-    setCurrentLineIndex(0);
-    setUserInput("");
-    console.log("샘플 텍스트 사용:", randomText);
   };
 
   // 컴포넌트 마운트 시 텍스트 가져오기
@@ -139,98 +97,28 @@ const total = numbers.reduce((sum, num) => sum + num, 0);`,
     fetchRandomText();
   }, []);
 
-  // 텍스트를 줄 단위로 분할
-  const getLines = () => {
-    if (!currentText) return [];
-    return currentText.content.split("\n");
-  };
+  // 텍스트 처리 함수들
+  const getLines = () => currentText?.content.split("\n") || [];
+  const getCurrentLine = () => getLines()[currentLineIndex] || "";
+  const getUpcomingLines = () =>
+    getLines().slice(currentLineIndex + 1, currentLineIndex + 4);
 
-  // 현재 쳐야 할 줄 가져오기
-  const getCurrentLine = () => {
-    const lines = getLines();
-    return lines[currentLineIndex] || "";
-  };
-
-  // 앞으로 쳐야 할 줄들 가져오기 (최대 3줄)
-  const getUpcomingLines = () => {
-    const lines = getLines();
-    return lines.slice(currentLineIndex + 1, currentLineIndex + 4);
-  };
-
-  // 실시간 통계 업데이트
-  useEffect(() => {
-    if (isStarted && startTime) {
-      intervalRef.current = setInterval(() => {
-        const now = new Date();
-        const timeElapsed = Math.floor(
-          (now.getTime() - startTime.getTime()) / 1000
-        );
-        const currentLine = getCurrentLine();
-
-        // 현재 줄의 정확한 글자 수와 오타 수 계산
-        const { correctChars: currentCorrectChars, errorCount: currentErrors } =
-          calculateAccuracy(currentLine, userInput);
-
-        // 전체 누적 정확한 글자 수 = 이전 줄들의 정확한 글자 + 현재 줄의 정확한 글자
-        const totalCorrectNow = totalCorrectChars + currentCorrectChars;
-
-        // WPM 계산
-        const minutes = timeElapsed / 60;
-        const effectiveMinutes = Math.max(minutes, 1 / 60);
-        const wpm = Math.round(totalCorrectNow / 5 / effectiveMinutes);
-
-        // 전체 입력한 글자 수 (이전 줄들 + 현재 줄)
-        const totalTypedChars = getTotalTypedChars() + userInput.length;
-
-        // 전체 정확도 계산
-        const accuracy =
-          totalTypedChars > 0
-            ? Math.round((totalCorrectNow / totalTypedChars) * 100)
-            : 100;
-
-        // 현재까지의 총 오타 수
-        const currentTotalErrors = totalErrors + currentErrors;
-
-        setStats({
-          wpm: wpm,
-          accuracy: accuracy,
-          timeElapsed: timeElapsed,
-          errors: currentTotalErrors,
-        });
-      }, 100);
-
-      return () => {
-        if (intervalRef.current) clearInterval(intervalRef.current);
-      };
-    }
-  }, [
-    isStarted,
-    userInput,
-    startTime,
-    currentLineIndex,
-    totalErrors,
-    totalCorrectChars,
-  ]);
-
-  // 정확도와 오타 수 계산
+  // 정확도 계산
   const calculateAccuracy = (targetLine: string, input: string) => {
     let correctChars = 0;
     let errorCount = 0;
-    const inputLength = input.length;
-    const targetLength = targetLine.length;
 
-    for (let i = 0; i < Math.min(inputLength, targetLength); i++) {
+    for (let i = 0; i < Math.min(input.length, targetLine.length); i++) {
       if (input[i] === targetLine[i]) {
         correctChars++;
       } else {
         errorCount++;
       }
     }
-
     return { correctChars, errorCount };
   };
 
-  // 지금까지 입력한 총 글자 수 계산 (완료된 줄들의 길이 합)
+  // 총 타이핑 글자 수 계산
   const getTotalTypedChars = () => {
     const lines = getLines();
     let total = 0;
@@ -240,25 +128,62 @@ const total = numbers.reduce((sum, num) => sum + num, 0);`,
     return total;
   };
 
+  // 실시간 통계 업데이트
+  useEffect(() => {
+    if (!isStarted || !startTime) return;
+
+    intervalRef.current = setInterval(() => {
+      const timeElapsed = Math.floor((Date.now() - startTime.getTime()) / 1000);
+      const currentLine = getCurrentLine();
+      const { correctChars, errorCount } = calculateAccuracy(
+        currentLine,
+        userInput
+      );
+
+      const totalCorrectNow = totalCorrectChars + correctChars;
+      const totalTypedChars = getTotalTypedChars() + userInput.length;
+
+      const minutes = Math.max(timeElapsed / 60, 1 / 60);
+      const wpm = Math.round(totalCorrectNow / 5 / minutes);
+      const accuracy =
+        totalTypedChars > 0
+          ? Math.round((totalCorrectNow / totalTypedChars) * 100)
+          : 100;
+
+      setStats({
+        wpm,
+        accuracy,
+        timeElapsed,
+        errors: totalErrors + errorCount,
+      });
+    }, 100);
+
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [
+    isStarted,
+    userInput,
+    startTime,
+    currentLineIndex,
+    totalErrors,
+    totalCorrectChars,
+  ]);
+
   // 입력 처리
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
 
-    // 시작하지 않았으면 시작
     if (!isStarted) {
       setIsStarted(true);
       setStartTime(new Date());
     }
 
     setUserInput(value);
-
     const currentLine = getCurrentLine();
 
-    // 현재 줄 완료 체크 - 길이가 맞으면 넘어가기
+    // 줄 완료 체크
     if (value.length === currentLine.length) {
-      const lines = getLines();
-
-      // 현재 줄의 최종 정확도 계산하여 누적값에 추가
       const { correctChars, errorCount } = calculateAccuracy(
         currentLine,
         value
@@ -266,17 +191,14 @@ const total = numbers.reduce((sum, num) => sum + num, 0);`,
       setTotalCorrectChars((prev) => prev + correctChars);
       setTotalErrors((prev) => prev + errorCount);
 
-      // 다음 줄로 이동
+      const lines = getLines();
       if (currentLineIndex < lines.length - 1) {
         setTimeout(() => {
           setCurrentLineIndex(currentLineIndex + 1);
-          setUserInput(""); // 입력 필드 초기화
-          if (inputRef.current) {
-            inputRef.current.focus();
-          }
+          setUserInput("");
+          inputRef.current?.focus();
         }, 100);
       } else {
-        // 모든 줄 완료
         completeTyping();
       }
     }
@@ -287,13 +209,11 @@ const total = numbers.reduce((sum, num) => sum + num, 0);`,
     if (intervalRef.current) clearInterval(intervalRef.current);
 
     // 결과 저장 시도
-    if (connectionStatus === "connected") {
+    if (isConnected) {
       try {
-        const response = await fetch("http://localhost:3000/typing/results", {
+        await fetch("http://localhost:3000/typing/results", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             textId: currentText?.id || "",
             wpm: stats.wpm,
@@ -304,19 +224,13 @@ const total = numbers.reduce((sum, num) => sum + num, 0);`,
             totalErrors: stats.errors,
           }),
         });
-
-        if (response.ok) {
-          console.log("결과 저장 성공");
-        } else {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
       } catch (error) {
         console.error("결과 저장 실패:", error);
       }
     }
 
     alert(
-      `완료!\nWPM: ${stats.wpm}\n정확도: ${stats.accuracy}%\n총 오타 수: ${stats.errors}개\n소요 시간: ${stats.timeElapsed}초`
+      `완료!\nWPM: ${stats.wpm}\n정확도: ${stats.accuracy}%\n총 오타: ${stats.errors}개\n소요 시간: ${stats.timeElapsed}초`
     );
   };
 
@@ -326,81 +240,79 @@ const total = numbers.reduce((sum, num) => sum + num, 0);`,
     setCurrentLineIndex(0);
     setIsStarted(false);
     setStartTime(null);
-    setTotalErrors(0); // 누적 오타 수 초기화
-    setTotalCorrectChars(0); // 누적 정확한 글자 수 초기화
+    setTotalErrors(0);
+    setTotalCorrectChars(0);
     setStats({ wpm: 0, accuracy: 100, timeElapsed: 0, errors: 0 });
+
+    // 인터벌 정리
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+
     fetchRandomText();
-    if (inputRef.current) inputRef.current.focus();
+    inputRef.current?.focus();
   };
 
-  // 텍스트 렌더링 (맞춤/틀림 표시)
+  // 현재 줄 렌더링
   const renderCurrentLine = () => {
     const currentLine = getCurrentLine();
     if (!currentLine) return null;
 
     return currentLine.split("").map((char, index) => {
-      let color = "#333"; // 기본 색상
+      let color = "#333";
       let backgroundColor = "transparent";
 
       if (index < userInput.length) {
-        // 입력한 글자와 비교
         if (userInput[index] === char) {
-          color = "#28a745"; // 초록색 (맞음)
+          color = "#28a745"; // 맞음
         } else {
-          color = "#dc3545"; // 빨간색 (틀림)
-          backgroundColor = "#ffe6e6"; // 연한 빨간 배경
+          color = "#dc3545"; // 틀림
+          backgroundColor = "#ffe6e6";
         }
       } else if (index === userInput.length) {
-        // 현재 입력해야 할 글자 (커서 위치)
-        backgroundColor = "#e3f2fd"; // 연한 파란 배경
+        backgroundColor = "#e3f2fd"; // 커서 위치
       }
 
       return (
-        <span
-          key={index}
-          style={{
-            color: color,
-            backgroundColor: backgroundColor,
-            padding: "1px",
-          }}
-        >
+        <span key={index} style={{ color, backgroundColor, padding: "1px" }}>
           {char}
         </span>
       );
     });
   };
 
-  // 연결 상태 표시 색상
-  const getStatusColor = () => {
-    switch (connectionStatus) {
-      case "connected":
-        return "#4CAF50";
-      case "disconnected":
-        return "#f44336";
-      case "checking":
-        return "#ff9800";
-      default:
-        return "#666";
-    }
-  };
+  // 컴포넌트 언마운트 시 정리
+  useEffect(() => {
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, []);
 
-  const getStatusText = () => {
-    switch (connectionStatus) {
-      case "connected":
-        return "백엔드 연결됨";
-      case "disconnected":
-        return "백엔드 연결 안됨 (샘플 데이터 사용)";
-      case "checking":
-        return "연결 확인 중...";
-      default:
-        return "알 수 없음";
-    }
-  };
+  if (!currentText) {
+    return (
+      <div
+        style={{
+          width: "1100px",
+          height: "400px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: "18px",
+          color: "#666",
+        }}
+      >
+        텍스트를 불러오는 중...
+      </div>
+    );
+  }
 
   return (
     <div style={{ width: "1100px" }}>
-      {/* 연결 상태 표시 - 연결됐을 때만 간단히 표시 */}
-      {connectionStatus === "connected" && (
+      {/* 연결 상태 */}
+      {isConnected && (
         <div
           style={{
             display: "flex",
@@ -423,50 +335,35 @@ const total = numbers.reduce((sum, num) => sum + num, 0);`,
         </div>
       )}
 
-      {/* 통계 표시 */}
+      {/* 통계 */}
       <div
         style={{
           display: "flex",
-          justifyContent: "space-between",
+          gap: "20px",
+          marginBottom: "15px",
+          fontSize: "14px",
+          color: "#666",
+        }}
+      >
+        <div>WPM: {stats.wpm}</div>
+        <div>정확도: {stats.accuracy}%</div>
+        <div>시간: {stats.timeElapsed}초</div>
+        <div>오타: {stats.errors}개</div>
+      </div>
+
+      {/* 텍스트 제목 */}
+      <div
+        style={{
+          fontSize: "14px",
+          color: "#666",
           marginBottom: "10px",
-          fontSize: "16px",
           fontWeight: "bold",
         }}
       >
-        <span>WPM: {stats.wpm}</span>
-        <span>정확도: {stats.accuracy}%</span>
-        <span>시간: {stats.timeElapsed}s</span>
-        <span>총 오타: {stats.errors}</span>
-        <button
-          onClick={restart}
-          style={{
-            padding: "5px 10px",
-            backgroundColor: "#4CAF50",
-            color: "white",
-            border: "none",
-            borderRadius: "5px",
-            cursor: "pointer",
-          }}
-        >
-          새로 시작
-        </button>
+        {currentText.title} ({currentLineIndex + 1}/{getLines().length}줄)
       </div>
 
-      {/* 현재 텍스트 제목 */}
-      {currentText && (
-        <div
-          style={{
-            fontSize: "14px",
-            color: "#666",
-            marginBottom: "10px",
-            fontWeight: "bold",
-          }}
-        >
-          {currentText.title} ({currentLineIndex + 1}/{getLines().length}줄)
-        </div>
-      )}
-
-      {/* 현재 쳐야 할 문장 */}
+      {/* 현재 타이핑 영역 */}
       <div
         style={{
           width: "1030px",
@@ -474,6 +371,7 @@ const total = numbers.reduce((sum, num) => sum + num, 0);`,
           backgroundColor: "#FFFFFF",
           marginBottom: "3px",
           borderRadius: "10px",
+          border: "1px solid #ddd",
         }}
       >
         <p
@@ -483,6 +381,7 @@ const total = numbers.reduce((sum, num) => sum + num, 0);`,
             position: "relative",
             top: "20px",
             fontFamily: "monospace",
+            wordBreak: "break-all",
           }}
         >
           {renderCurrentLine()}
@@ -495,8 +394,9 @@ const total = numbers.reduce((sum, num) => sum + num, 0);`,
             position: "relative",
             top: "9px",
             height: "4px",
+            margin: "0 auto",
           }}
-        ></hr>
+        />
         <input
           ref={inputRef}
           type="text"
@@ -504,18 +404,20 @@ const total = numbers.reduce((sum, num) => sum + num, 0);`,
           onChange={handleInputChange}
           style={{
             fontSize: "20px",
-            border: "thick solid #FFFFFF",
+            border: "none",
+            outline: "none",
             marginLeft: "25px",
             width: "900px",
             marginTop: "7px",
             fontFamily: "monospace",
+            backgroundColor: "transparent",
           }}
           placeholder="여기에 타이핑하세요..."
           autoFocus
         />
       </div>
 
-      {/* 앞으로 쳐야 할 내용 미리보기 */}
+      {/* 미리보기 */}
       <div
         style={{
           width: "1030px",
@@ -523,15 +425,11 @@ const total = numbers.reduce((sum, num) => sum + num, 0);`,
           backgroundColor: "#FFFFFF",
           borderRadius: "10px",
           padding: "20px",
+          border: "1px solid #ddd",
+          marginBottom: "15px",
         }}
       >
-        <div
-          style={{
-            fontSize: "16px",
-            color: "#666",
-            marginBottom: "10px",
-          }}
-        >
+        <div style={{ fontSize: "16px", color: "#666", marginBottom: "10px" }}>
           다음 내용:
         </div>
         {getUpcomingLines().map((line, index) => (
@@ -543,11 +441,44 @@ const total = numbers.reduce((sum, num) => sum + num, 0);`,
               marginBottom: "5px",
               fontFamily: "monospace",
               color: "#888",
+              wordBreak: "break-all",
             }}
           >
-            {line}
+            {line || "\u00A0"} {/* 빈 줄 처리 */}
           </p>
         ))}
+      </div>
+
+      {/* 제어 버튼 */}
+      <div style={{ display: "flex", gap: "10px" }}>
+        <button
+          onClick={restart}
+          style={{
+            padding: "10px 20px",
+            fontSize: "14px",
+            backgroundColor: "#007bff",
+            color: "white",
+            border: "none",
+            borderRadius: "5px",
+            cursor: "pointer",
+          }}
+        >
+          다시 시작
+        </button>
+        <button
+          onClick={fetchRandomText}
+          style={{
+            padding: "10px 20px",
+            fontSize: "14px",
+            backgroundColor: "#28a745",
+            color: "white",
+            border: "none",
+            borderRadius: "5px",
+            cursor: "pointer",
+          }}
+        >
+          새 텍스트
+        </button>
       </div>
     </div>
   );
